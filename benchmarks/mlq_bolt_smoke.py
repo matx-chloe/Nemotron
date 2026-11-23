@@ -54,12 +54,18 @@ def main():
     event("model_download_complete")
     tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True, trust_remote_code=False)
     model = Gemma4ForConditionalGeneration.from_pretrained(model_path, local_files_only=True,
-        trust_remote_code=False, dtype=torch.bfloat16, device_map={"": "cuda:0"}, attn_implementation="sdpa")
+        trust_remote_code=False, dtype=torch.bfloat16, device_map={"": "cuda:0"}, attn_implementation="eager")
     model.config.use_cache = False
     if hasattr(model.config, "text_config"):
         model.config.text_config.use_cache = False
     event("model_loaded", gpu=torch.cuda.get_device_name(), gpu_allocated_bytes=torch.cuda.memory_allocated())
-    model = get_peft_model(model, LoraConfig(r=8, lora_alpha=16, target_modules=["q_proj", "v_proj"],
+    targets = [name for name, layer in model.named_modules()
+               if "language_model" in name and isinstance(layer, torch.nn.Linear)
+               and name.endswith((".q_proj", ".v_proj", ".q_proj.linear", ".v_proj.linear"))]
+    if not targets:
+        raise RuntimeError("No supported text attention layers found for LoRA")
+    event("lora_targets", count=len(targets), examples=targets[:4])
+    model = get_peft_model(model, LoraConfig(r=8, lora_alpha=16, target_modules=targets,
         lora_dropout=0.0, bias="none", task_type="CAUSAL_LM"))
     model.train()
     trainable = [p for p in model.parameters() if p.requires_grad]

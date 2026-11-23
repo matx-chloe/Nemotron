@@ -19,4 +19,6 @@ Example inside the approved MLQ image:
 python benchmarks/mlq_bolt_smoke.py --seconds 300
 ```
 
-The smoke test is prepared but has not yet been executed on a GPU.
+Validated on one NVIDIA H200: a five-minute synthetic LoRA run completed successfully.
+The script uses eager attention because the multimodal audio component does not
+support SDPA, and selects supported text Linear layers for LoRA adapters.
